@@ -9,9 +9,9 @@ pragma solidity ^0.8.25;
  * - Voucher System: 서버 서명 기반 바우처 민팅
  * - ReentrancyGuard: 교환 경로 재진입 보호
  *
- * 핵심 변경사항:
- * - MINTER_ROLE 제거 → 서버 서명 검증으로 변경
- * - mint() 함수 제거 → mintWithVoucher() 함수로 대체
+ * 핵심 기능:
+ * - 포인트↔토큰 교환 (바우처 민팅, 토큰 소각)
+ * - 서버 서명 검증
  * - 바우처 기반 일회성 민팅 시스템
  */
 
@@ -46,7 +46,7 @@ contract BloomingGov is
     );
 
     // -----------------------------
-    // Voucher Structure
+    // 바우처 구조체
     // -----------------------------
 
     struct ExchangeVoucher {
@@ -62,7 +62,7 @@ contract BloomingGov is
     );
 
     // -----------------------------
-    // State Variables
+    // 상태 변수
     // -----------------------------
 
     address public serverSigner;
@@ -70,7 +70,7 @@ contract BloomingGov is
     uint256 public minUnit = 1e18;
 
     // -----------------------------
-    // Custom Errors
+    // 에러
     // -----------------------------
 
     error ZeroAddress();
@@ -84,7 +84,7 @@ contract BloomingGov is
     error NotVoucherOwner();
 
     // -----------------------------
-    // Events
+    // 이벤트
     // -----------------------------
 
     event VoucherRedeemed(
@@ -123,7 +123,7 @@ contract BloomingGov is
     }
 
     // -----------------------------
-    // Admin Functions
+    // 어드민 기능
     // -----------------------------
 
     function setServerSigner(address newSigner) external onlyOwner {
@@ -146,7 +146,7 @@ contract BloomingGov is
     }
 
     // -----------------------------
-    // Core Function: Voucher Minting
+    // 코어 함수
     // -----------------------------
 
     function mintWithVoucher(
@@ -230,7 +230,7 @@ contract BloomingGov is
     }
 
     // -----------------------------
-    // Permit
+    // Permit 서명
     // -----------------------------
 
     function permit(
@@ -266,7 +266,7 @@ contract BloomingGov is
     }
 
     // -----------------------------
-    // ERC20Votes Integration
+    // ERC20Votes Overrides
     // -----------------------------
 
     function _update(address from, address to, uint256 value)
@@ -286,7 +286,7 @@ contract BloomingGov is
     }
 
     // -----------------------------
-    // Convenience Functions
+    // 셀프 위임
     // -----------------------------
 
     function selfDelegate() external {
