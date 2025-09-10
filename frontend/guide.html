@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>사용자 가이드 - 블록체인 과제시험</title>
+  <!-- Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="bg-grid"></div>
+
+  <!-- ===== 가이드 헤더 ===== -->
+  <header class="guide-header glass">
+    <div class="brand">
+      <div class="mark">📖</div>
+      <div class="title">
+        <h1>사용자 가이드</h1>
+        <p class="tag">블록체인 과제시험: 재화 교환 서비스</p>
+      </div>
+    </div>
+    <div class="nav-actions">
+      <a href="index.html" class="btn connect">메인으로 돌아가기</a>
+    </div>
+  </header>
+
+  <!-- ===== 과제 정보 및 주의사항 ===== -->
+  <section class="project-info glass">
+    <div class="info-header">
+      <h1>블록체인 과제시험: 재화 교환 서비스</h1>
+      <p class="subtitle">Web2 포인트 ↔ Web3 거버넌스 토큰 (바우처 기반 교환)</p>
+    </div>
+
+    <div class="requirements-grid">
+      <div class="requirement-card completed">
+        <h3>✅ 구현 완료된 요구사항</h3>
+        <ul>
+          <li><strong>Web2 포인트 시스템:</strong> SQLite 기반 포인트 관리</li>
+          <li><strong>Web3 토큰:</strong> ERC20Votes 기반 BGOV 토큰</li>
+          <li><strong>거버넌스:</strong> 위임(본인/타주소) 및 투표력 관리</li>
+          <li><strong>고정 비율 교환:</strong> 1 토큰 = 1 포인트(환경변수로 조정 가능)</li>
+          <li><strong>웹 애플리케이션:</strong> 모든 기능 테스트 가능(지갑 연동, UI 부분 갱신)</li>
+        </ul>
+      </div>
+
+      <div class="innovation-card">
+        <h3>🚀 바우처 시스템</h3>
+        <p><strong>장점</strong></p>
+        <ul>
+          <li>서버 키 유출 시에도 피해가 <em>웹2 포인트 한도</em>로 제한</li>
+          <li>사용자가 직접 트랜잭션 실행 → 책임·권한 명확</li>
+          <li>논스·기한 기반 <em>일회성</em> 보장</li>
+          <li>EIP-712 표준 서명으로 무결성 확보</li>
+          <li>네트워크 폭증으로 인한 가스비 대량 폭탄 방지</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="usage-instructions">
+      <h3>📋 실행 및 테스트 순서</h3>
+
+      <div class="instruction-steps">
+
+        <div class="step">
+          <span class="step-number">0</span>
+          <div class="step-content">
+            <h4>백엔드 환경 준비</h4>
+            <ul>
+              <li>루트에 <code>.env</code> 작성:
+                <pre>RPC_URL=&lt;테스트넷 RPC&gt;
+SERVER_PRIVATE_KEY=&lt;테스트용 지갑 개인키(서명 전용)&gt;
+RATE_POINTS_PER_TOKEN=1
+DATABASE_URL=./points.db</pre>
+              </li>
+              <li>백엔드 실행: <code>node backend/server.js</code> (기본 포트: <code>3001</code>)</li>
+              <li>구성 확인: <code>GET /config</code> 응답에서 토큰 주소/서버 서명자 공개주소 확인</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">1</span>
+          <div class="step-content">
+            <h4>프론트엔드 준비</h4>
+            <ul>
+              <li>MetaMask 설치 및 브라우저 연결</li>
+              <li>정적 서버로 <code>frontend</code> 폴더 제공(예: <code>npx http-server frontend -p 5500</code>)</li>
+              <li>Sepolia 테스트넷 연결(앱에서 자동 전환/추가)</li>
+              <li>가스비용용 Sepolia ETH 필요 → Faucet 사용</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">2</span>
+          <div class="step-content">
+            <h4>포인트 받기</h4>
+            <ul>
+              <li>“지갑 연결” 버튼으로 MetaMask 연결</li>
+              <li>“포인트 받기 +50” 버튼으로 테스트 포인트 적립(여러 번 가능)</li>
+              <li>포인트는 서버 DB에 누적 저장</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">3</span>
+          <div class="step-content">
+            <h4>바우처 생성</h4>
+            <ul>
+              <li>포인트 수량 입력 → “바우처 생성”</li>
+              <li>사용 포인트가 <strong>즉시 차감</strong>되고, EIP-712 서명 포함 바우처 발급</li>
+              <li>바우처 유효시간: <strong>1시간</strong></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">4</span>
+          <div class="step-content">
+            <h4>토큰 받기(민팅)</h4>
+            <ul>
+              <li>바우처 목록에서 “토큰 받기”</li>
+              <li>MetaMask 트랜잭션 승인(가스 지불)</li>
+              <li>체인에서 서명 검증 후 <strong>민팅 완료</strong></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">5</span>
+          <div class="step-content">
+            <h4>거버넌스 테스트</h4>
+            <ul>
+              <li>“나에게 위임”으로 투표권 활성화(또는 특정 주소 위임)</li>
+              <li>ERC20Votes 체크포인트 기반 투표력 확인</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="step">
+          <span class="step-number">6</span>
+          <div class="step-content">
+            <h4>역교환(토큰 → 포인트)</h4>
+            <ul>
+              <li>소각할 수량 입력 → “소각 + 포인트 받기”</li>
+              <li>온체인에서 <strong>직접 burn</strong> 실행</li>
+              <li>소각 TX 해시를 서버에 제출 → 영수증 검증 후 포인트 적립(1:1)</li>
+              <li><em>approve/burnFrom 방식은 사용하지 않습니다.</em></li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="important-notes">
+      <h3>⚠️ 주의사항</h3>
+      <div class="notes-grid">
+        <div class="note-item critical">
+          <h4>바우처 만료</h4>
+          <p>유효시간(1시간) 경과 시 만료됩니다. 만료 후에는 “만료 포인트 받기(환급)”로 포인트를 되돌릴 수 있습니다.</p>
+        </div>
+
+        <div class="note-item info">
+          <h4>재적립</h4>
+          <p>아직 만료 전인 <em>pending</em> 상태의 바우처는 “포인트 재적립”으로 즉시 취소 및 포인트 복원 가능합니다.</p>
+        </div>
+
+        <div class="note-item warning">
+          <h4>가스비</h4>
+          <p>체인 트랜잭션(민팅/소각)에는 Sepolia ETH가 필요합니다.</p>
+        </div>
+
+        <div class="note-item security">
+          <h4>보안</h4>
+          <p>.env로 주입된 서버 개인키는 <em>서명 전용</em>이며, 프론트엔드로 노출되지 않습니다. PR에는 실제 키를 포함하지 않습니다.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="tech-specs">
+      <h3>🔧 기술 스펙</h3>
+      <div class="specs-grid">
+        <div class="spec-card">
+          <h4>블록체인</h4>
+          <ul>
+            <li>Ethereum Sepolia 테스트넷</li>
+            <li>Solidity 0.8.25, OpenZeppelin 5.x</li>
+            <li>ERC20 + ERC20Votes + ERC20Permit</li>
+            <li>EIP-712 구조화 데이터 서명</li>
+          </ul>
+        </div>
+
+        <div class="spec-card">
+          <h4>백엔드</h4>
+          <ul>
+            <li>Node.js + Express (REST)</li>
+            <li>SQLite3 (better-sqlite3)</li>
+            <li>ethers.js v6</li>
+            <li>소각 영수증 검증 기반 적립</li>
+            <li>바우처 생성/환급/재적립 API</li>
+          </ul>
+        </div>
+
+        <div class="spec-card">
+          <h4>프론트엔드</h4>
+          <ul>
+            <li>Vanilla JavaScript</li>
+            <li>ethers.js v6 (CDN)</li>
+            <li>MetaMask 연동(체인 자동 전환)</li>
+            <li>상태 <em>부분 갱신</em> 기반 UI</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="troubleshooting">
+      <h3>🔧 문제 해결</h3>
+      <div class="trouble-grid">
+        <div class="trouble-item">
+          <h4>지갑 연결 실패</h4>
+          <ul>
+            <li>MetaMask 설치/로그인 확인</li>
+            <li>네트워크: Sepolia로 전환</li>
+            <li>브라우저 탭 새로고침 후 재시도</li>
+          </ul>
+        </div>
+
+        <div class="trouble-item">
+          <h4>트랜잭션 실패</h4>
+          <ul>
+            <li>Sepolia ETH 잔액 확인(가스)</li>
+            <li>컨트랙트 주소/네트워크 확인</li>
+            <li>사용자 취소 여부 확인</li>
+          </ul>
+        </div>
+
+        <div class="trouble-item">
+          <h4>바우처 오류</h4>
+          <ul>
+            <li>포인트 잔액/만료 시간 확인</li>
+            <li>서버 연결 상태 확인</li>
+            <li>만료 시 “만료 포인트 받기”로 환급</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="innovation-details">
+      <h3>💡 바우처 시스템 상세</h3>
+
+      <div class="technical-flow">
+        <h4>기술적 흐름</h4>
+        <div class="flow-steps">
+          <div class="flow-step">
+            <div class="flow-number">1</div>
+            <div class="flow-content">
+              <h5>웹2 포인트 차감</h5>
+              <p>요청 즉시 DB에서 차감(트랜잭션 보장)</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-number">2</div>
+            <div class="flow-content">
+              <h5>EIP-712 바우처 생성</h5>
+              <p>구조화 데이터 생성 및 서버 서명</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-number">3</div>
+            <div class="flow-content">
+              <h5>사용자 트랜잭션</h5>
+              <p>민팅 함수에 바우처·서명 전달</p>
+            </div>
+          </div>
+          <div class="flow-step">
+            <div class="flow-number">4</div>
+            <div class="flow-content">
+              <h5>온체인 검증</h5>
+              <p>서명 검증 후 토큰 민팅</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <div class="footer-nav">
+      <a href="index.html" class="btn primary">메인 애플리케이션으로 돌아가기</a>
+    </div>
+    <small>© Blooming Demo – 블록체인 과제시험 가이드</small>
+  </footer>
+</body>
+
+</html>

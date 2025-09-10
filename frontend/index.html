@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="ko">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>재화 교환 서비스 – Points ↔ BGOV (Voucher System)</title>
+
+  <!-- Fonts -->
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap"
+    rel="stylesheet">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- Ethers v6 (UMD 전역 번들) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+</head>
+
+<body>
+  <div class="bg-grid"></div>
+
+  <!-- ===== 상단: 지갑/요약 박스 ===== -->
+  <header class="hero glass">
+    <div class="brand">
+      <div class="mark">BGOV</div>
+      <div class="title">
+        <h1>재화 교환 서비스</h1>
+        <p class="tag">Points ↔ BGOV • Voucher System • Governance Ready</p><br>
+        <a href="guide.html" class="btn ghost small" target="_blank">사용자 가이드</a>
+      </div>
+    </div>
+
+    <div class="wallet">
+      <button id="connect" class="btn connect" type="button">지갑 연결</button>
+      <div class="who">
+        <span id="addr">연결되지 않음</span>
+        <span id="ethBal">– ETH</span>
+      </div>
+      <div class="metrics">
+        <div class="metric"><span class="lab">내 포인트</span><strong id="points">-</strong></div>
+        <button id="earn50" class="btn ghost small" type="button">포인트 받기 +50</button>
+        <button id="refreshPoints" class="btn ghost small" type="button">포인트 새로고침</button>
+        <a id="btnScan" class="link-btn" target="_blank" rel="noreferrer">Etherscan (Sepolia)</a>
+      </div>
+    </div>
+    <p class="hint">웹2 <-> 웹3 토큰을 스왑하는 2가지 방법을 고민했습니다.</p>
+    <p class="hint">첫번째 방법, 사용자가 토큰 교환을 관리자에게 요청하면, 자동으로 사용자에게 토큰을 mint 해주는 API 요청 방법입니다.</p>
+    <p class="hint">ㄴ사용자가 가스비를 내지 않는다는 것과, UX 편리함이 있지만, 관리자가 가스비를 지불해야 하는 부담이 있습니다.</p>
+    <p class="hint">두번째 방법, 현재 개발된 내용으로 사용자가 직접 포인트를 바우처로 생성하여 관리자의 지갑키로 서명을 검증하고, 사용자가 그 바우처로 mint하는 방법입니다.</p>
+    <p class="hint">ㄴ사용자가 가스비를 부담하며, 상대적으로 자동화 구현이 쉽게 가능합니다.</p>
+    <p class="hint">초기는 API 형태로 사용자 가스비 부담을 줄이고, 추후 확장된다면 바우처 시스템을 도입하는 것도 고려할 수 있습니다.</p>
+  </header>
+
+  <!-- ===== 바우처 시스템 섹션 ===== -->
+  <main class="voucher-section glass">
+    <div class="section-header">
+      <h2>💎 바우처 시스템</h2>
+      <p class="hint">포인트를 사용해 바우처를 생성하고, 바우처로 토큰을 받으세요</p>
+    </div>
+
+    <!-- 바우처 생성 -->
+    <section class="voucher-create">
+      <h3>1. 바우처 생성 (포인트 → 바우처)</h3>
+      <div class="controls">
+        <input id="pointsToSpend" type="number" min="0" placeholder="사용할 포인트 입력" />
+        <button id="createVoucher" class="btn primary" type="button">바우처 생성</button>
+      </div>
+      <div id="tx" class="status"></div>
+    </section>
+
+    <!-- 바우처 목록 -->
+    <section class="voucher-list-section">
+      <div class="list-header">
+        <h3>2. 내 바우처 목록</h3>
+        <button id="refreshVouchers" class="btn ghost small" type="button">새로고침</button>
+      </div>
+      <div id="voucherList" class="voucher-list">
+        <div class="loading">바우처 목록을 불러오는 중...</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ===== 토큰 → 포인트 교환 ===== -->
+  <section class="reverse-exchange glass">
+    <h2>토큰 → 포인트 교환</h2>
+    <p class="hint">BGOV 토큰을 소각하여 포인트로 교환합니다 (1:1 비율)</p>
+
+    <!-- 현재 상태 정보 -->
+    <div class="token-info-grid">
+      <div class="info-card">
+        <span class="info-label">내 BGOV 잔액</span>
+        <strong id="tokenBalance" class="info-value">-</strong>
+      </div>
+      <!-- 승인(allowance) 카드는 삭제 -->
+      <div class="info-actions">
+        <button id="refreshTokenInfo" class="btn ghost small" type="button">새로고침</button>
+      </div>
+    </div>
+
+    <!-- 교환 실행 -->
+    <div class="exchange-controls">
+      <input id="tokensToSpend" type="number" min="0" placeholder="소각할 토큰 수량 입력" />
+      <button id="exchangeTokens" class="btn primary" type="button">소각 + 포인트 받기</button>
+    </div>
+
+    <div id="txExchange" class="status"></div>
+  </section>
+
+
+  <!-- ===== 향상된 거버넌스 & 잔액 섹션 ===== -->
+  <section class="owned glass">
+    <div class="owned-head">
+      <h3>거버넌스 도구</h3>
+      <div class="links">
+        <a id="linkEtherscan" href="#" target="_blank" class="link-btn">토큰 계약 (Sepolia)</a>
+      </div>
+    </div>
+
+    <!-- 위임 필요 알림 -->
+    <div id="delegationAlert" class="delegation-alert" style="display: none;">
+      <div class="alert-icon">⚠️</div>
+      <div class="alert-content">
+        <strong>위임 관련!</strong><br>
+        <span id="undelegatedAmount">0</span> BGOV 토큰이 본인에게 위임되지 않았습니다. 투표권을 활성화하려면 본인에게 위임해주세요.
+      </div>
+      <button onclick="$('#delegateSelf').click()" class="alert-action">나에게 바로 위임하기</button>
+    </div>
+
+    <div class="gov-grid">
+      <!-- 토큰 잔액 및 투표력 -->
+      <div class="card governance-status">
+        <h4>거버넌스 상태</h4>
+
+        <div class="governance-info">
+          <div class="gov-metric">
+            <span class="metric-label">BGOV 잔액</span>
+            <div id="gov" class="metric-value">-</div>
+          </div>
+
+          <div class="gov-metric">
+            <span class="metric-label">투표력</span>
+            <div id="votingPower" class="metric-value voting-power">-</div>
+          </div>
+
+          <div class="gov-metric">
+            <span class="metric-label">위임 상태</span>
+            <div id="delegatedTo" class="delegate-status none">-</div>
+          </div>
+        </div>
+
+        <button id="refreshGov" class="btn ghost" type="button">정보 새로고침</button>
+      </div>
+
+      <!-- 투표권 위임 -->
+      <div class="card delegation-controls">
+        <h4>투표권 위임</h4>
+        <p class="hint">토큰 잔액을 투표권으로 활성화하려면 위임이 필요합니다.</p>
+
+        <div class="delegation-options">
+          <button id="delegateSelf" class="btn primary" type="button">나에게 위임</button>
+
+          <div class="delegate-other">
+            <input id="delegateAddr" type="text" placeholder="위임 대상 주소 (0x…)" />
+            <button id="delegateOther" class="btn secondary" type="button">주소로 위임</button>
+          </div>
+        </div>
+
+        <div id="txDeleg" class="status"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 전역 로딩 오버레이 ===== -->
+  <div id="overlay" class="overlay hidden">
+    <div class="spinner"></div>
+    <p id="overlayMsg">처리 중…</p>
+  </div>
+
+  <footer class="foot">
+    <small>© Blooming Demo – Voucher System – Points ↔ BGOV</small>
+  </footer>
+
+  <script src="utils.js"></script>
+  <script src="config.js"></script>
+  <script src="wallet.js"></script>
+  <script src="points.js"></script>
+  <script src="vouchers.js"></script>
+  <script src="tokenExchange.js"></script>
+  <script src="governance.js"></script>
+  <script src="main.js"></script>
+</body>
+
+</html>
