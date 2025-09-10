@@ -42,7 +42,7 @@
 
 ## 핵심: 바우처 시스템
 
-서버 직접 민팅 대신 EIP-712 서명 바우처 발급으로:
+서버 직접 민팅 대신 EIP-712 서명 바우처 발급으로
 - 서버 키 유출 시 피해를 포인트 한도로 제한
 - 사용자가 직접 트랜잭션 제어하여 책임과 권한 명확화
 - 네트워크 폭증 시 가스비 폭탄 위험 제거
@@ -52,6 +52,8 @@
 ```bash
 # 1. 의존성 설치
 npm install express cors dotenv ethers better-sqlite3
+# 1-2 프론트엔드용 설치
+npm install -g http-server
 
 # 2. 환경변수 설정 (.env)
 RPC_URL=https://sepolia.infura.io/v3/YOUR_PROJECT_ID

@@ -46,7 +46,7 @@
           <li><strong>Web3 토큰:</strong> ERC20Votes 기반 BGOV 토큰</li>
           <li><strong>거버넌스:</strong> 위임(본인/타주소) 및 투표력 관리</li>
           <li><strong>고정 비율 교환:</strong> 1 토큰 = 1 포인트(환경변수로 조정 가능)</li>
-          <li><strong>웹 애플리케이션:</strong> 모든 기능 테스트 가능(지갑 연동, UI 부분 갱신)</li>
+          <li><strong>웹 애플리케이션:</strong> 모든 기능 테스트 가능(지갑, 블록체인 연동 및 호환)</li>
         </ul>
       </div>
 
@@ -73,7 +73,7 @@
           <div class="step-content">
             <h4>백엔드 환경 준비</h4>
             <ul>
-              <li>루트에 <code>.env</code> 작성:
+              <li>backend 폴더의 <code>.env(.env.example)</code> 작성:
                 <pre>RPC_URL=&lt;테스트넷 RPC&gt;
 SERVER_PRIVATE_KEY=&lt;테스트용 지갑 개인키(서명 전용)&gt;
 RATE_POINTS_PER_TOKEN=1
@@ -81,6 +81,7 @@ DATABASE_URL=./points.db</pre>
               </li>
               <li>백엔드 실행: <code>node backend/server.js</code> (기본 포트: <code>3001</code>)</li>
               <li>구성 확인: <code>GET /config</code> 응답에서 토큰 주소/서버 서명자 공개주소 확인</li>
+              <li>파일명이 .env.example로 되어 있다면, <code>파일명을 .env로 수정하여 사용</code> </li>
             </ul>
           </div>
         </div>
@@ -153,7 +154,7 @@ DATABASE_URL=./points.db</pre>
               <li>소각할 수량 입력 → “소각 + 포인트 받기”</li>
               <li>온체인에서 <strong>직접 burn</strong> 실행</li>
               <li>소각 TX 해시를 서버에 제출 → 영수증 검증 후 포인트 적립(1:1)</li>
-              <li><em>approve/burnFrom 방식은 사용하지 않습니다.</em></li>
+              <li><em>바우처 시스템과 일관성을 위해 approve/burnFrom(api 요청 관리자 가스비 부담) 방식은 사용하지 않습니다.</em></li>
             </ul>
           </div>
         </div>
@@ -181,7 +182,7 @@ DATABASE_URL=./points.db</pre>
 
         <div class="note-item security">
           <h4>보안</h4>
-          <p>.env로 주입된 서버 개인키는 <em>서명 전용</em>이며, 프론트엔드로 노출되지 않습니다. PR에는 실제 키를 포함하지 않습니다.</p>
+          <p>.env로 주입된 서버 개인키는 <em>서명 전용</em>이며, 프론트엔드로 노출되지 않습니다. 하지만 PR에는 테스트용 키를 삽입하였습니다.</p>
         </div>
       </div>
     </div>
@@ -249,6 +250,7 @@ DATABASE_URL=./points.db</pre>
             <li>포인트 잔액/만료 시간 확인</li>
             <li>서버 연결 상태 확인</li>
             <li>만료 시 “만료 포인트 받기”로 환급</li>
+            <li>컨트랙트가 거부할 시 재적립으로 교환 후 재시도</li>
           </ul>
         </div>
       </div>
@@ -278,7 +280,7 @@ DATABASE_URL=./points.db</pre>
             <div class="flow-number">3</div>
             <div class="flow-content">
               <h5>사용자 트랜잭션</h5>
-              <p>민팅 함수에 바우처·서명 전달</p>
+              <p>민팅 함수에 바우처/서명 전달</p>
             </div>
           </div>
           <div class="flow-step">
