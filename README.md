@@ -11,6 +11,16 @@
 
 ---
 
+## 평가
+- 백엔드, 블록체인 분야로 평가 희망합니다.
+
+## 테스트 환경설정
+- ```.env.example``` 파일명을 ```.env```로 수정합니다. 테스트 키는 그대로 사용하셔도 됩니다.
+- ```npm install express cors dotenv ethers better-sqlite3``` 의존성 설치합니다.
+- ```node backend/server.js``` 터미널1
+- ```npx http-server frontend -p 5500``` 터미널2
+- 웹 실행
+
 ## 구현 결과
 
 ✅ Web2 포인트 시스템 (SQLite 기반)  
