@@ -32,7 +32,6 @@ db.exec(`
 CREATE INDEX IF NOT EXISTS idx_vouchers_user_status 
 ON vouchers(user_address, status);
 `);
-
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_vouchers_deadline 
 ON vouchers(deadline);
@@ -57,3 +56,4 @@ function cleanupExpiredVouchers() {
 setInterval(cleanupExpiredVouchers, 5 * 60 * 1000);
 
 module.exports = db;
+
