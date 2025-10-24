@@ -3,8 +3,16 @@ const { ethers } = require('ethers');
 const db = require('./db');
 const { ADDRESS, ABI } = require('./smartcontracts');
 
-// ===== Ethers setup =====
-const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+// ===== Ethers compatibility (v5/v6) =====
+const isV6 = !!ethers.Interface && !!ethers.parseUnits;
+const JsonRpcProvider = ethers.JsonRpcProvider || (ethers.providers && ethers.providers.JsonRpcProvider);
+const Wallet  = ethers.Wallet;
+const Contract = ethers.Contract;
+const Interface = ethers.Interface || (ethers.utils && ethers.utils.Interface);
+const parseUnits = ethers.parseUnits || (ethers.utils && ethers.utils.parseUnits);
+
+// ===== Provider =====
+const provider = new JsonRpcProvider(process.env.RPC_URL);
 
 // PRIVATE KEY 안전 파싱/검증
 let pk = (process.env.SERVER_PRIVATE_KEY || '').trim();
@@ -15,11 +23,11 @@ if (!pk.startsWith('0x')) pk = '0x' + pk;
 if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
   throw new Error('Invalid SERVER_PRIVATE_KEY format: expected 0x + 64 hex characters');
 }
-const wallet = new ethers.Wallet(pk, provider);
+const wallet = new Wallet(pk, provider);
 
 // 토큰 컨트랙트 (읽기 전용)
 const tokenAddress = ADDRESS.token;
-const token = new ethers.Contract(tokenAddress, ABI.token, provider);
+const token = new Contract(tokenAddress, ABI.token, provider);
 
 const DECIMALS = 18;
 const POINTS_PER_TOKEN = Math.max(1, Number(process.env.RATE_POINTS_PER_TOKEN || '1'));
@@ -96,11 +104,11 @@ async function signVoucher(voucher) {
   };
   const types = {
     ExchangeVoucher: [
-      { name: 'user', type: 'address' },
-      { name: 'pointsDeducted', type: 'uint256' },
-      { name: 'tokenAmount', type: 'uint256' },
-      { name: 'nonce', type: 'uint256' },
-      { name: 'deadline', type: 'uint256' },
+      { name: 'user',           type: 'address'  },
+      { name: 'pointsDeducted', type: 'uint256'  },
+      { name: 'tokenAmount',    type: 'uint256'  },
+      { name: 'nonce',          type: 'uint256'  },
+      { name: 'deadline',       type: 'uint256'  },
     ]
   };
   const value = {
@@ -110,7 +118,10 @@ async function signVoucher(voucher) {
     nonce: BigInt(voucher.nonce),
     deadline: BigInt(voucher.deadline)
   };
-  return await wallet.signTypedData(domain, types, value);
+  // v5: wallet._signTypedData(domain, types, value)
+  // v6: wallet.signTypedData(domain, types, value)
+  if (wallet.signTypedData) return await wallet.signTypedData(domain, types, value);
+  return await wallet._signTypedData(domain, types, value);
 }
 
 // ===== 바우처 생성 (포인트 → 토큰) =====
@@ -127,7 +138,7 @@ async function createExchangeVoucher(address, pointsToSpend) {
   const tokens = Math.floor(pointsToSpend / POINTS_PER_TOKEN);
   if (tokens <= 0) throw new Error(`points must be >= ${POINTS_PER_TOKEN}`);
 
-  const tokenAmountBig = ethers.parseUnits(tokens.toString(), DECIMALS); // bigint
+  const tokenAmountBig = parseUnits(tokens.toString(), DECIMALS); // bigint / BN
   const used = tokens * POINTS_PER_TOKEN;
   const nonceBig = generateUniqueNonceBig();
   const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1시간
@@ -178,24 +189,26 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
   }
 
   // 3) Burned 이벤트 파싱
-  const iface = new ethers.Interface(ABI.token);
+  const iface = new Interface(ABI.token);
   let burnedFrom = null, burnedAmount = null;
   for (const log of rec.logs) {
     try {
       const parsed = iface.parseLog(log);
       if (parsed && parsed.name === 'Burned') {
         burnedFrom = parsed.args.from.toLowerCase();
-        burnedAmount = parsed.args.amount; // bigint
+        burnedAmount = parsed.args.amount; // v6: bigint, v5: BigNumber
         break;
       }
-    } catch (_) { }
+    } catch (_) {}
   }
   if (!burnedFrom) throw new Error('burn event not found');
   if (burnedFrom !== addr) throw new Error('burned-from mismatch');
 
   // 4) 금액 일치
-  const expected = ethers.parseUnits(tokensAmount.toString(), DECIMALS);
-  if (burnedAmount !== expected) throw new Error('burn amount mismatch');
+  const expected = parseUnits(tokensAmount.toString(), DECIMALS);
+  // v5 BigNumber 처리
+  const asString = (x) => (typeof x === 'bigint' ? x.toString() : x.toString());
+  if (asString(burnedAmount) !== asString(expected)) throw new Error('burn amount mismatch');
 
   // 5) 포인트 적립
   const credit = tokensAmount * POINTS_PER_TOKEN;
