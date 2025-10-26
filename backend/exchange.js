@@ -1,9 +1,9 @@
-// backend/exchange.js - burn 영수증 검증 + 만료 환급 + 재적립 (ethers v5 전용)
+// backend/exchange.js - burn 영수증 검증 + 만료 환급 + 재적립
 const { ethers } = require('ethers');
 const db = require('./db');
 const { ADDRESS, ABI } = require('./smartcontracts');
 
-// ===== Provider (v5) =====
+// ===== Provider =====
 const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
 
 // ===== PRIVATE KEY 안전 파싱/검증 =====
@@ -81,7 +81,7 @@ function updateVoucherStatus(nonce, status) {
   `).run(status, nonce);
 }
 
-// ===== EIP-712 서명 (v5: _signTypedData 고정) =====
+// ===== EIP-712 서명 =====
 async function signVoucher(voucher) {
   const net = await provider.getNetwork();
   const chainId = Number(net.chainId);
@@ -131,7 +131,7 @@ async function createExchangeVoucher(address, pointsToSpend) {
   const tokenAmountBN = ethers.utils.parseUnits(tokens.toString(), DECIMALS); // BigNumber
   const used = tokens * POINTS_PER_TOKEN;
   const nonceBig = generateUniqueNonceBig(); // bigint
-  const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1시간 (bigint)
+  const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1시간
 
   const voucher = db.transaction(() => {
     db.prepare('UPDATE users SET points = points - ? WHERE address = ?').run(used, addr);
@@ -178,7 +178,7 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
     throw new Error('tx target mismatch');
   }
 
-  // 3) Burned 이벤트 파싱 (v5: ethers.utils.Interface 사용)
+  // 3) Burned 이벤트 파싱
   const iface = new ethers.utils.Interface(ABI.token);
   let burnedFrom = null, burnedAmountBN = null;
 
@@ -196,7 +196,7 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
   if (!burnedFrom) throw new Error('burn event not found');
   if (burnedFrom !== addr) throw new Error('burned-from mismatch');
 
-  // 4) 금액 일치 (v5: BigNumber 비교)
+  // 4) 금액 일치
   const expectedBN = ethers.utils.parseUnits(tokensAmount.toString(), DECIMALS);
   if (!burnedAmountBN.eq(expectedBN)) throw new Error('burn amount mismatch');
 
