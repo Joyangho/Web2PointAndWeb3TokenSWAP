@@ -6,7 +6,7 @@ const cors = require('cors');
 const {
   getPoints,
   addPoints,
-  getVouchers,
+  getVouchersAwaitingRefund,
   createExchangeVoucher,
   creditFromBurnTx,     // 사용자 burn 검증 -> 포인트 적립
   refundExpiredVoucher, // 만료 환급
@@ -68,7 +68,7 @@ app.get('/vouchers/:address', (req, res) => {
   const address = String(req.params.address || '').trim();
   if (!address) return res.status(400).json({ error: 'missing address' });
   try {
-    const vouchers = getVouchers(address);
+    const vouchers = getVouchersAwaitingRefund(address);
     res.json({ address, vouchers });
   } catch (e) {
     console.error(e);
