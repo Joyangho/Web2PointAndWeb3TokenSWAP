@@ -42,20 +42,22 @@ function addPoints(address, delta) {
 
 // ===== Voucher helpers =====
 function generateUniqueNonceBig() {
-  const t = BigInt(Date.now());
-  const r = BigInt(Math.floor(Math.random() * 1_000_000));
-  return (t * 1_000_000n) + r; // bigint
+  const timestampNonce = BigInt(Date.now());
+  const randomComponent = BigInt(Math.floor(Math.random() * 1_000_000));
+  const NONCE_MULTIPLIER = 1_000_000n;
+  
+  return (timestampNonce * NONCE_MULTIPLIER) + randomComponent;
 }
 
-// 환급 전까지 만료 바우처도 목록에 남김
-function getVouchers(address) {
+function getVouchersAwaitingRefund(address) {
   const addr = address.toLowerCase();
+  const REFUNDABLE_STATUSES = ['pending', 'expired'];
+  
   return db.prepare(`
     SELECT * FROM vouchers 
     WHERE user_address = ?
-      AND status IN ('pending','expired')
-    ORDER BY created_at DESC
-  `).all(addr);
+      AND status IN (?, ?)
+  `).all(addr, ...REFUNDABLE_STATUSES);
 }
 
 function saveVoucher(v) {
@@ -101,7 +103,6 @@ async function signVoucher(voucher) {
       { name: 'deadline',       type: 'uint256'  },
     ]
   };
-  // v5에서는 문자열/숫자/BN 모두 허용되지만, 교차환경 안전을 위해 문자열로 고정
   const value = {
     user: voucher.user,
     pointsDeducted: voucher.pointsDeducted.toString(),
@@ -161,6 +162,28 @@ async function createExchangeVoucher(address, pointsToSpend) {
   };
 }
 
+// Burned 이벤트 파싱 로직
+function parseBurnedEventFromReceipt(receipt, expectedAddress) {
+  const iface = new ethers.utils.Interface(ABI.token);
+  let burnedFrom = null, burnedAmountBN = null;
+
+  for (const log of receipt.logs) {
+    try {
+      const parsed = iface.parseLog(log);
+      if (parsed && parsed.name === 'Burned') {
+        burnedFrom = parsed.args.from.toLowerCase();
+        burnedAmountBN = ethers.BigNumber.from(parsed.args.amount);
+        break;
+      }
+    } catch (_) {}
+  }
+  
+  if (!burnedFrom) throw new Error('burn event not found');
+  if (burnedFrom !== expectedAddress.toLowerCase()) throw new Error('burned-from mismatch');
+
+  return { from: burnedFrom, amount: burnedAmountBN };
+}
+
 // ===== 토큰 → 포인트: 사용자 burn TX 검증 =====
 async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
   const addr = userAddress.toLowerCase();
@@ -177,22 +200,8 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
     throw new Error('tx target mismatch');
   }
 
-  // 3) Burned 이벤트 파싱
-  const iface = new ethers.utils.Interface(ABI.token);
-  let burnedFrom = null, burnedAmountBN = null;
-
-  for (const log of rec.logs) {
-    try {
-      const parsed = iface.parseLog(log);
-      if (parsed && parsed.name === 'Burned') {
-        burnedFrom = parsed.args.from.toLowerCase();
-        burnedAmountBN = ethers.BigNumber.from(parsed.args.amount);
-        break;
-      }
-    } catch (_) {}
-  }
-  if (!burnedFrom) throw new Error('burn event not found');
-  if (burnedFrom !== addr) throw new Error('burned-from mismatch');
+  // 3) Burned 이벤트 파싱 및 검증
+  const { amount: burnedAmountBN } = parseBurnedEventFromReceipt(rec, addr);
 
   // 4) 금액 일치
   const expectedBN = ethers.utils.parseUnits(tokensAmount.toString(), DECIMALS);
@@ -245,7 +254,7 @@ module.exports = {
   addPoints,
 
   // Vouchers
-  getVouchers,
+  getVouchersAwaitingRefund,
   createExchangeVoucher,
   refundExpiredVoucher,
   redepositVoucher,
