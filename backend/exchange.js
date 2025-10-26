@@ -231,7 +231,7 @@ function refundExpiredVoucher(address, nonce) {
   return { refunded, points: getPoints(addr) };
 }
 
-// ===== (신규) 만료 전 재적립 =====
+// ===== 만료 전 재적립 =====
 function redepositVoucher(address, nonce) {
   const addr = address.toLowerCase();
   const row = db.prepare(`SELECT * FROM vouchers WHERE nonce = ? AND user_address = ?`).get(String(nonce), addr);
