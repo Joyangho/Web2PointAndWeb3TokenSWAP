@@ -110,7 +110,6 @@ async function signVoucher(voucher) {
     deadline: voucher.deadline.toString()
   };
 
-  // v5 방식
   return await wallet._signTypedData(domain, types, value);
 }
 
@@ -187,7 +186,6 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
       const parsed = iface.parseLog(log);
       if (parsed && parsed.name === 'Burned') {
         burnedFrom = parsed.args.from.toLowerCase();
-        // v5 BigNumber로 수신
         burnedAmountBN = ethers.BigNumber.from(parsed.args.amount);
         break;
       }
