@@ -4,10 +4,8 @@ const db = require('./db');
 const { ADDRESS, ABI } = require('./smartcontracts');
 
 // ===== Ethers compatibility (v5/v6) =====
-const isV6 = !!ethers.Interface && !!ethers.parseUnits;
 const JsonRpcProvider = ethers.JsonRpcProvider || (ethers.providers && ethers.providers.JsonRpcProvider);
 const Wallet  = ethers.Wallet;
-const Contract = ethers.Contract;
 const Interface = ethers.Interface || (ethers.utils && ethers.utils.Interface);
 const parseUnits = ethers.parseUnits || (ethers.utils && ethers.utils.parseUnits);
 
@@ -27,7 +25,6 @@ const wallet = new Wallet(pk, provider);
 
 // 토큰 컨트랙트 (읽기 전용)
 const tokenAddress = ADDRESS.token;
-const token = new Contract(tokenAddress, ABI.token, provider);
 
 const DECIMALS = 18;
 const POINTS_PER_TOKEN = Math.max(1, Number(process.env.RATE_POINTS_PER_TOKEN || '1'));
@@ -196,7 +193,7 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
       const parsed = iface.parseLog(log);
       if (parsed && parsed.name === 'Burned') {
         burnedFrom = parsed.args.from.toLowerCase();
-        burnedAmount = parsed.args.amount; // v6: bigint, v5: BigNumber
+        burnedAmount = parsed.args.amount; // bigint
         break;
       }
     } catch (_) {}
