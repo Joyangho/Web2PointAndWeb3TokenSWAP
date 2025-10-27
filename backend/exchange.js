@@ -6,7 +6,7 @@ const { ADDRESS, ABI } = require('./smartcontracts');
 // ===== Provider =====
 const provider = new ethers.providers.JsonRpcProvider(process.env.RPC_URL);
 
-// ===== PRIVATE KEY 안전 파싱/검증 =====
+// PRIVATE KEY 안전 파싱/검증
 let pk = (process.env.SERVER_PRIVATE_KEY || '').trim();
 if ((pk.startsWith('"') && pk.endsWith('"')) || (pk.startsWith("'") && pk.endsWith("'"))) {
   pk = pk.slice(1, -1).trim();
@@ -18,7 +18,8 @@ if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
 const wallet = new ethers.Wallet(pk, provider);
 
 // ===== 상수 =====
-const tokenAddress = ADDRESS.token; // 읽기 주소만 필요 (이 파일에서는 컨트랙트 인스턴스 직접 사용 안 함)
+const tokenAddress = ADDRESS.token;
+
 const DECIMALS = 18;
 const POINTS_PER_TOKEN = Math.max(1, Number(process.env.RATE_POINTS_PER_TOKEN || '1'));
 
@@ -49,6 +50,7 @@ function generateUniqueNonceBig() {
   return (timestampNonce * NONCE_MULTIPLIER) + randomComponent;
 }
 
+// 환급 전까지 만료 바우처도 목록에 남김
 function getVouchersAwaitingRefund(address) {
   const addr = address.toLowerCase();
   const REFUNDABLE_STATUSES = ['pending', 'expired'];
@@ -128,25 +130,25 @@ async function createExchangeVoucher(address, pointsToSpend) {
   const tokens = Math.floor(pointsToSpend / POINTS_PER_TOKEN);
   if (tokens <= 0) throw new Error(`points must be >= ${POINTS_PER_TOKEN}`);
 
-  const tokenAmountBN = ethers.utils.parseUnits(tokens.toString(), DECIMALS); // BigNumber
+  const tokenAmountBN = ethers.utils.parseUnits(tokens.toString(), DECIMALS);
   const used = tokens * POINTS_PER_TOKEN;
-  const nonceBig = generateUniqueNonceBig(); // bigint
-  const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600); // 1시간
+  const nonceBig = generateUniqueNonceBig();
+  const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
   const voucher = db.transaction(() => {
     db.prepare('UPDATE users SET points = points - ? WHERE address = ?').run(used, addr);
     return {
       user: address,
-      pointsDeducted: used,                      // number
-      tokenAmount: tokenAmountBN.toString(),     // string (BN → string)
-      nonce: nonceBig.toString(),                // string
-      deadline: deadlineBig.toString()           // string
+      pointsDeducted: used,                      
+      tokenAmount: tokenAmountBN.toString(),     
+      nonce: nonceBig.toString(),                
+      deadline: deadlineBig.toString()           
     };
   })();
 
   const signature = await signVoucher({
     user: voucher.user,
-    pointsDeducted: voucher.pointsDeducted,        // string으로 변환은 signVoucher 내부에서 처리
+    pointsDeducted: voucher.pointsDeducted,       
     tokenAmount: voucher.tokenAmount,
     nonce: voucher.nonce,
     deadline: voucher.deadline,
