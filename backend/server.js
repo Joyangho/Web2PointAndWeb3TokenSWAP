@@ -148,3 +148,4 @@ app.listen(port, () => {
   console.log(`API on :${port}`);
   console.log(`Server wallet: ${walletAddress}`);
 });
+
