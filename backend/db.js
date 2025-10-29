@@ -1,6 +1,5 @@
-// backend/db.js - SQLite3 데이터베이스 초기화 및 만료 바우처 정리
+// backend/db.js - 바우처 테이블 상태 관리 및 만료 정리
 const Database = require('better-sqlite3');
-
 const db = new Database(process.env.DATABASE_URL || './points.db');
 
 // users 테이블
