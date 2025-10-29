@@ -139,6 +139,26 @@ app.post('/exchange/burn-to-points', async (req, res) => {
   }
 });
 
+app.post('/api/v1/redeposit', async (req, res) => {
+  try {
+    const { address, nonce } = req.body;
+    const out = await redepositVoucher(address, nonce);
+    res.json(out);
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'redeposit failed' });
+  }
+});
+
+app.post('/api/v1/refund', async (req, res) => {
+  try {
+    const { address, nonce } = req.body;
+    const out = await refundExpiredVoucher(address, nonce);
+    res.json(out);
+  } catch (e) {
+    res.status(400).json({ error: e.message || 'refund failed' });
+  }
+});
+
 // 404
 app.use((_req, res) => res.status(404).json({ error: 'not found' }));
 
@@ -148,4 +168,3 @@ app.listen(port, () => {
   console.log(`API on :${port}`);
   console.log(`Server wallet: ${walletAddress}`);
 });
-
