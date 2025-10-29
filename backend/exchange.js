@@ -17,9 +17,8 @@ if (!/^0x[0-9a-fA-F]{64}$/.test(pk)) {
 }
 const wallet = new ethers.Wallet(pk, provider);
 
-// ===== 상수 =====
 const tokenAddress = ADDRESS.token;
-
+const token = new ethers.Contract(tokenAddress, ABI.token, provider);
 const DECIMALS = 18;
 const POINTS_PER_TOKEN = Math.max(1, Number(process.env.RATE_POINTS_PER_TOKEN || '1'));
 
@@ -46,15 +45,29 @@ function generateUniqueNonceBig() {
   const timestampNonce = BigInt(Date.now());
   const randomComponent = BigInt(Math.floor(Math.random() * 1_000_000));
   const NONCE_MULTIPLIER = 1_000_000n;
-  
+
   return (timestampNonce * NONCE_MULTIPLIER) + randomComponent;
 }
+
+token.on('VoucherRedeemed', async (user, nonce, pointsDeducted, tokenAmount, deadline, event) => {
+  try {
+    const nonceStr = String(nonce?.toString ? nonce.toString() : nonce);
+    const row = db.prepare('SELECT status FROM vouchers WHERE nonce = ?').get(nonceStr);
+    if (row && row.status !== 'used') {
+      db.prepare(`UPDATE vouchers SET status = 'used', updated_at = datetime('now') WHERE nonce = ?`)
+        .run(nonceStr);
+      console.log(`[db] voucher ${nonceStr} -> used (on-chain)`);
+    }
+  } catch (e) {
+    console.error('VoucherRedeemed handler error:', e);
+  }
+});
 
 // 환급 전까지 만료 바우처도 목록에 남김
 function getVouchersAwaitingRefund(address) {
   const addr = address.toLowerCase();
   const REFUNDABLE_STATUSES = ['pending', 'expired'];
-  
+
   return db.prepare(`
     SELECT * FROM vouchers 
     WHERE user_address = ?
@@ -63,6 +76,10 @@ function getVouchersAwaitingRefund(address) {
 }
 
 function saveVoucher(v) {
+  if (!v.signature) throw new Error('missing signature');
+  if (!/^0x[0-9a-fA-F]{130}$/.test(v.signature))
+    throw new Error('invalid signature format');
+
   db.prepare(`
     INSERT INTO vouchers (
       nonce, user_address, points_deducted, token_amount, 
@@ -78,6 +95,8 @@ function saveVoucher(v) {
     'pending'
   );
 }
+
+
 function updateVoucherStatus(nonce, status) {
   db.prepare(`
     UPDATE vouchers SET status = ?, updated_at = datetime('now') 
@@ -98,11 +117,11 @@ async function signVoucher(voucher) {
   };
   const types = {
     ExchangeVoucher: [
-      { name: 'user',           type: 'address'  },
-      { name: 'pointsDeducted', type: 'uint256'  },
-      { name: 'tokenAmount',    type: 'uint256'  },
-      { name: 'nonce',          type: 'uint256'  },
-      { name: 'deadline',       type: 'uint256'  },
+      { name: 'user', type: 'address' },
+      { name: 'pointsDeducted', type: 'uint256' },
+      { name: 'tokenAmount', type: 'uint256' },
+      { name: 'nonce', type: 'uint256' },
+      { name: 'deadline', type: 'uint256' },
     ]
   };
   const value = {
@@ -114,6 +133,30 @@ async function signVoucher(voucher) {
   };
 
   return await wallet._signTypedData(domain, types, value);
+}
+
+// ===== 온체인 논스 사용여부 체크 (공통) =====
+async function isNonceUsedOnChain(nonce) {
+  if (typeof token.isNonceUsed === 'function') {
+    return await token.isNonceUsed(ethers.BigNumber.from(String(nonce)));
+  }
+  if (typeof token.usedNonces === 'function') {
+    return await token.usedNonces(ethers.BigNumber.from(String(nonce)));
+  }
+  throw new Error('contract missing isNonceUsed/usedNonces');
+}
+
+// ===== DB 원자적 처리 (포인트 증감 + 상태변경) =====
+function atomicPointsAndStatus(addr, pointsDelta, nonce, newStatus) {
+  return db.transaction(() => {
+    if (pointsDelta !== 0) {
+      db.prepare(`UPDATE users SET points = points + ? WHERE address = ?`)
+        .run(pointsDelta, addr);
+    }
+    updateVoucherStatus(nonce, newStatus);
+    const cur = db.prepare(`SELECT points FROM users WHERE address = ?`).get(addr);
+    return cur?.points ?? 0;
+  })();
 }
 
 // ===== 바우처 생성 (포인트 → 토큰) =====
@@ -135,29 +178,26 @@ async function createExchangeVoucher(address, pointsToSpend) {
   const nonceBig = generateUniqueNonceBig();
   const deadlineBig = BigInt(Math.floor(Date.now() / 1000) + 3600);
 
-  const voucher = db.transaction(() => {
-    db.prepare('UPDATE users SET points = points - ? WHERE address = ?').run(used, addr);
-    return {
-      user: address,
-      pointsDeducted: used,                      
-      tokenAmount: tokenAmountBN.toString(),     
-      nonce: nonceBig.toString(),                
-      deadline: deadlineBig.toString()           
-    };
+  const tempVoucher = {
+    user: address,
+    pointsDeducted: used,
+    tokenAmount: tokenAmountBN.toString(),
+    nonce: nonceBig.toString(),
+    deadline: deadlineBig.toString()
+  };
+
+  const signature = await signVoucher(tempVoucher);
+  const voucherRow = { ...tempVoucher, signature };
+
+  db.transaction(() => {
+    db.prepare('UPDATE users SET points = points - ? WHERE address = ?')
+      .run(used, addr);
+
+    saveVoucher(voucherRow);
   })();
 
-  const signature = await signVoucher({
-    user: voucher.user,
-    pointsDeducted: voucher.pointsDeducted,       
-    tokenAmount: voucher.tokenAmount,
-    nonce: voucher.nonce,
-    deadline: voucher.deadline,
-  });
-
-  saveVoucher({ ...voucher, signature });
-
   return {
-    voucher,
+    voucher: voucherRow,
     signature,
     usedPoints: used,
     ratePointsPerToken: POINTS_PER_TOKEN
@@ -177,9 +217,9 @@ function parseBurnedEventFromReceipt(receipt, expectedAddress) {
         burnedAmountBN = ethers.BigNumber.from(parsed.args.amount);
         break;
       }
-    } catch (_) {}
+    } catch (_) { }
   }
-  
+
   if (!burnedFrom) throw new Error('burn event not found');
   if (burnedFrom !== expectedAddress.toLowerCase()) throw new Error('burned-from mismatch');
 
@@ -215,39 +255,50 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
   return { credited: credit, points: newPoints, ratePointsPerToken: POINTS_PER_TOKEN };
 }
 
-// ===== 만료 바우처 환급 =====
-function refundExpiredVoucher(address, nonce) {
+// ===== 환급/재적립 공통 파이프 =====
+async function processVoucher(address, nonceInput, mode) {
   const addr = address.toLowerCase();
-  const row = db.prepare(`SELECT * FROM vouchers WHERE nonce = ? AND user_address = ?`).get(String(nonce), addr);
+  const nonce = String(nonceInput);
+  const row = db.prepare(`
+    SELECT * FROM vouchers WHERE nonce = ? AND user_address = ?
+  `).get(nonce, addr);
   if (!row) throw new Error('voucher not found');
 
   const now = Math.floor(Date.now() / 1000);
-  if (!(row.status === 'expired' || (row.status === 'pending' && Number(row.deadline) < now))) {
-    throw new Error('voucher not expired');
+  const isExpired = Number(row.deadline) < now;
+
+  if (mode === 'refund') {
+    if (!(row.status === 'expired' || (row.status === 'pending' && isExpired))) {
+      throw new Error('voucher not expired');
+    }
+  } else if (mode === 'redeposit') {
+    if (row.status !== 'pending') throw new Error('only pending vouchers can be re-deposited');
+    if (isExpired) throw new Error('cannot redeposit expired voucher');
+  } else {
+    throw new Error('invalid action');
   }
 
-  const refunded = Number(row.points_deducted);
-  addPoints(addr, refunded);
-  updateVoucherStatus(row.nonce, 'expired_refunded');
+  const usedOnChain = await isNonceUsedOnChain(row.nonce);
+  if (usedOnChain) {
+    updateVoucherStatus(row.nonce, 'used');
+    throw new Error('voucher already used on-chain');
+  }
 
-  return { refunded, points: getPoints(addr) };
+  const delta = Number(row.points_deducted);
+  const newStatus = (mode === 'refund') ? 'expired_refunded' : 'redeposited';
+  const pointsAfter = atomicPointsAndStatus(addr, delta, row.nonce, newStatus);
+
+  return mode === 'refund'
+    ? { refunded: delta, points: pointsAfter }
+    : { restored: delta, points: pointsAfter };
 }
 
-// ===== 만료 전 재적립 =====
-function redepositVoucher(address, nonce) {
-  const addr = address.toLowerCase();
-  const row = db.prepare(`SELECT * FROM vouchers WHERE nonce = ? AND user_address = ?`).get(String(nonce), addr);
-  if (!row) throw new Error('voucher not found');
+async function refundExpiredVoucher(address, nonce) {
+  return await processVoucher(address, nonce, 'refund');
+}
 
-  if (row.status !== 'pending') {
-    throw new Error('only pending vouchers can be re-deposited');
-  }
-
-  const restored = Number(row.points_deducted);
-  addPoints(addr, restored);
-  updateVoucherStatus(row.nonce, 'redeposited');
-
-  return { restored, points: getPoints(addr) };
+async function redepositVoucher(address, nonce) {
+  return await processVoucher(address, nonce, 'redeposit');
 }
 
 module.exports = {
