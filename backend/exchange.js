@@ -52,16 +52,100 @@ function generateUniqueNonceBig() {
 token.on('VoucherRedeemed', async (user, nonce, pointsDeducted, tokenAmount, deadline, event) => {
   try {
     const nonceStr = String(nonce?.toString ? nonce.toString() : nonce);
-    const row = db.prepare('SELECT status FROM vouchers WHERE nonce = ?').get(nonceStr);
-    if (row && row.status !== 'used') {
-      db.prepare(`UPDATE vouchers SET status = 'used', updated_at = datetime('now') WHERE nonce = ?`)
-        .run(nonceStr);
-      console.log(`[db] voucher ${nonceStr} -> used (on-chain)`);
+    const addr = String(user).toLowerCase();
+
+    const result = db.transaction(() => {
+      const row = db.prepare(`
+        SELECT status, points_deducted, user_address 
+        FROM vouchers 
+        WHERE nonce = ?
+      `).get(nonceStr);
+
+      if (!row) {
+        console.warn(`[EVENT] Voucher ${nonceStr} not found in DB`);
+        return { action: 'none' };
+      }
+
+      if (row.user_address !== addr) {
+        console.error(`[SECURITY] Address mismatch! DB: ${row.user_address}, Event: ${addr}`);
+        return { action: 'mismatch' };
+      }
+
+      if (row.status === 'redeposited') {
+        console.error(`[SECURITY] 🚨 DOUBLE-SPEND DETECTED! Voucher ${nonceStr}`);
+
+        const deduct = Number(row.points_deducted);
+
+        db.prepare(`UPDATE users SET points = points - ? WHERE address = ?`)
+          .run(deduct, addr);
+
+        db.prepare(`
+          UPDATE vouchers 
+          SET status = 'used_after_redeposit', updated_at = datetime('now') 
+          WHERE nonce = ?
+        `).run(nonceStr);
+
+        return { action: 'clawback', amount: deduct, user: addr };
+      }
+
+      if (row.status === 'expired_refunded') {
+        console.error(`[SECURITY] 🚨 Voucher ${nonceStr} was refunded but used on-chain`);
+        const deduct = Number(row.points_deducted);
+        db.prepare(`UPDATE users SET points = points - ? WHERE address = ?`)
+          .run(deduct, addr);
+        db.prepare(`
+          UPDATE vouchers 
+          SET status = 'used_after_refund', updated_at = datetime('now') 
+          WHERE nonce = ?
+        `).run(nonceStr);
+        return { action: 'clawback', amount: deduct, user: addr };
+      }
+
+      if (row.status !== 'used') {
+        db.prepare(`
+          UPDATE vouchers 
+          SET status = 'used', updated_at = datetime('now') 
+          WHERE nonce = ?
+        `).run(nonceStr);
+        return { action: 'normal' };
+      }
+
+      return { action: 'already_used' };
+    })();
+
+    if (result.action === 'clawback') {
+      console.log(`[SECURITY] ✅ Clawed back ${result.amount} points from ${result.user}`);
     }
+
   } catch (e) {
-    console.error('VoucherRedeemed handler error:', e);
+    console.error('[EVENT] VoucherRedeemed handler error:', e);
   }
 });
+
+// ===== 보안 설정 =====
+const REDEPOSIT_COOLDOWN_MS = 5 * 60 * 1000;
+const REDEPOSIT_RATE_LIMIT = 3; //
+const redepositAttempts = new Map(); //
+
+// ===== Rate Limiting 체크 =====
+function checkRateLimit(address) {
+  const now = Date.now();
+  const key = address.toLowerCase();
+
+  if (!redepositAttempts.has(key)) {
+    redepositAttempts.set(key, []);
+  }
+
+  const attempts = redepositAttempts.get(key);
+  const recentAttempts = attempts.filter(t => now - t < 60000);
+  redepositAttempts.set(key, recentAttempts);
+
+  if (recentAttempts.length >= REDEPOSIT_RATE_LIMIT) {
+    throw new Error('too many redeposit attempts, please wait a minute');
+  }
+
+  recentAttempts.push(now);
+}
 
 // 환급 전까지 만료 바우처도 목록에 남김
 function getVouchersAwaitingRefund(address) {
@@ -77,7 +161,7 @@ function getVouchersAwaitingRefund(address) {
 
 function saveVoucher(v) {
   if (!v.signature) throw new Error('missing signature');
-  if (!/^0x[0-9a-fA-F]{130}$/.test(v.signature))
+  if (!/^0x[0-9a-fA-F]{130,132}$/.test(v.signature))
     throw new Error('invalid signature format');
 
   db.prepare(`
@@ -95,7 +179,6 @@ function saveVoucher(v) {
     'pending'
   );
 }
-
 
 function updateVoucherStatus(nonce, status) {
   db.prepare(`
@@ -137,13 +220,19 @@ async function signVoucher(voucher) {
 
 // ===== 온체인 논스 사용여부 체크 (공통) =====
 async function isNonceUsedOnChain(nonce) {
-  if (typeof token.isNonceUsed === 'function') {
-    return await token.isNonceUsed(ethers.BigNumber.from(String(nonce)));
+  try {
+    if (typeof token.isNonceUsed === 'function') {
+      return await token.isNonceUsed(ethers.BigNumber.from(String(nonce)));
+    }
+    if (typeof token.usedNonces === 'function') {
+      return await token.usedNonces(ethers.BigNumber.from(String(nonce)));
+    }
+    throw new Error('contract missing isNonceUsed/usedNonces');
+  } catch (error) {
+    console.error('[CHAIN] Failed to check nonce:', error.message);
+
+    return true;
   }
-  if (typeof token.usedNonces === 'function') {
-    return await token.usedNonces(ethers.BigNumber.from(String(nonce)));
-  }
-  throw new Error('contract missing isNonceUsed/usedNonces');
 }
 
 // ===== DB 원자적 처리 (포인트 증감 + 상태변경) =====
@@ -186,15 +275,37 @@ async function createExchangeVoucher(address, pointsToSpend) {
     deadline: deadlineBig.toString()
   };
 
-  const signature = await signVoucher(tempVoucher);
-  const voucherRow = { ...tempVoucher, signature };
+  let signature;
+  let voucherRow;
 
-  db.transaction(() => {
-    db.prepare('UPDATE users SET points = points - ? WHERE address = ?')
-      .run(used, addr);
+  try {
+    signature = await signVoucher(tempVoucher);
+    voucherRow = { ...tempVoucher, signature };
 
-    saveVoucher(voucherRow);
-  })();
+    db.transaction(() => {
+      const result = db.prepare(`
+        UPDATE users SET points = points - ? 
+        WHERE address = ? AND points >= ?
+      `).run(used, addr, used);
+
+      if (result.changes === 0) {
+        throw new Error('insufficient points or concurrent update detected');
+      }
+
+      saveVoucher(voucherRow);
+    })();
+
+    console.log(`[VOUCHER] Created: ${nonceBig.toString()} for ${addr}`);
+
+  } catch (error) {
+    console.error(`[VOUCHER] Creation failed for ${addr}:`, error.message);
+
+    if (error.message.includes('UNIQUE constraint')) {
+      throw new Error('nonce collision (please retry)');
+    }
+
+    throw new Error(`voucher creation failed: ${error.message}`);
+  }
 
   return {
     voucher: voucherRow,
@@ -255,13 +366,19 @@ async function creditFromBurnTx(userAddress, tokensAmount, txHash) {
   return { credited: credit, points: newPoints, ratePointsPerToken: POINTS_PER_TOKEN };
 }
 
-// ===== 환급/재적립 공통 파이프 =====
+// ===== 락 + 환급/재적립 공통 파이프 =====
 async function processVoucher(address, nonceInput, mode) {
   const addr = address.toLowerCase();
   const nonce = String(nonceInput);
+
+  if (mode === 'redeposit') {
+    checkRateLimit(addr);
+  }
+
   const row = db.prepare(`
     SELECT * FROM vouchers WHERE nonce = ? AND user_address = ?
   `).get(nonce, addr);
+
   if (!row) throw new Error('voucher not found');
 
   const now = Math.floor(Date.now() / 1000);
@@ -272,25 +389,58 @@ async function processVoucher(address, nonceInput, mode) {
       throw new Error('voucher not expired');
     }
   } else if (mode === 'redeposit') {
-    if (row.status !== 'pending') throw new Error('only pending vouchers can be re-deposited');
-    if (isExpired) throw new Error('cannot redeposit expired voucher');
-  } else {
-    throw new Error('invalid action');
+    if (row.status !== 'pending') {
+      throw new Error('only pending vouchers can be re-deposited');
+    }
+    if (isExpired) {
+      throw new Error('cannot redeposit expired voucher');
+    }
+
+    const createdAt = new Date(row.created_at).getTime();
+    if (Date.now() - createdAt < REDEPOSIT_COOLDOWN_MS) {
+      const remainingSec = Math.ceil((REDEPOSIT_COOLDOWN_MS - (Date.now() - createdAt)) / 1000);
+      throw new Error(`redeposit cooldown: please wait ${remainingSec} seconds`);
+    }
   }
 
-  const usedOnChain = await isNonceUsedOnChain(row.nonce);
-  if (usedOnChain) {
-    updateVoucherStatus(row.nonce, 'used');
-    throw new Error('voucher already used on-chain');
+  const lockResult = db.prepare(`
+    UPDATE vouchers 
+    SET status = 'processing', updated_at = datetime('now') 
+    WHERE nonce = ? AND status = ?
+  `).run(nonce, row.status);
+
+  if (lockResult.changes === 0) {
+    throw new Error('voucher already being processed or status changed');
   }
 
-  const delta = Number(row.points_deducted);
-  const newStatus = (mode === 'refund') ? 'expired_refunded' : 'redeposited';
-  const pointsAfter = atomicPointsAndStatus(addr, delta, row.nonce, newStatus);
+  try {
+    const usedOnChain = await isNonceUsedOnChain(row.nonce);
 
-  return mode === 'refund'
-    ? { refunded: delta, points: pointsAfter }
-    : { restored: delta, points: pointsAfter };
+    if (usedOnChain) {
+      updateVoucherStatus(row.nonce, 'used');
+      throw new Error('voucher already used on-chain');
+    }
+
+    const delta = Number(row.points_deducted);
+    const newStatus = (mode === 'refund') ? 'expired_refunded' : 'redeposited';
+
+    const pointsAfter = atomicPointsAndStatus(addr, delta, row.nonce, newStatus);
+
+    return mode === 'refund'
+      ? { refunded: delta, points: pointsAfter }
+      : { restored: delta, points: pointsAfter };
+
+  } catch (error) {
+    if (error.message.includes('already used on-chain')) {
+    } else {
+      db.prepare(`
+        UPDATE vouchers 
+        SET status = ?, updated_at = datetime('now') 
+        WHERE nonce = ? AND status = 'processing'
+      `).run(row.status, nonce);
+    }
+    throw error;
+  }
 }
 
 async function refundExpiredVoucher(address, nonce) {
