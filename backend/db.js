@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
   token_amount TEXT NOT NULL,
   deadline INTEGER NOT NULL,
   signature TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending',
+  status TEXT NOT NULL DEFAULT 'pending',  --
   created_at TEXT NOT NULL,
   updated_at TEXT,
   FOREIGN KEY (user_address) REFERENCES users(address)
@@ -32,6 +32,7 @@ db.exec(`
 CREATE INDEX IF NOT EXISTS idx_vouchers_user_status 
 ON vouchers(user_address, status);
 `);
+
 db.exec(`
 CREATE INDEX IF NOT EXISTS idx_vouchers_deadline 
 ON vouchers(deadline);
