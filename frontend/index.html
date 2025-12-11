@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>재화 교환 서비스 – Points ↔ BGOV (Voucher System)</title>
+  <title>재화 교환 서비스 – Points ↔ PTT (Voucher System)</title>
 
   <!-- Fonts -->
   <link
@@ -24,10 +24,10 @@
   <!-- ===== 상단: 지갑/요약 박스 ===== -->
   <header class="hero glass">
     <div class="brand">
-      <div class="mark">BGOV</div>
+      <div class="mark">PTT</div>
       <div class="title">
         <h1>재화 교환 서비스</h1>
-        <p class="tag">Points ↔ BGOV • Voucher System • Governance Ready</p><br>
+        <p class="tag">Points ↔ PTT • Voucher System • Governance Ready</p><br>
         <a href="guide.html" class="btn ghost small" target="_blank">사용자 가이드</a>
       </div>
     </div>
@@ -85,12 +85,12 @@
   <!-- ===== 토큰 → 포인트 교환 ===== -->
   <section class="reverse-exchange glass">
     <h2>토큰 → 포인트 교환</h2>
-    <p class="hint">BGOV 토큰을 소각하여 포인트로 교환합니다 (1:1 비율)</p>
+    <p class="hint">PTT 토큰을 소각하여 포인트로 교환합니다 (1:1 비율)</p>
 
     <!-- 현재 상태 정보 -->
     <div class="token-info-grid">
       <div class="info-card">
-        <span class="info-label">내 BGOV 잔액</span>
+        <span class="info-label">내 PTT 잔액</span>
         <strong id="tokenBalance" class="info-value">-</strong>
       </div>
       <!-- 승인(allowance) 카드는 삭제 -->
@@ -123,7 +123,7 @@
       <div class="alert-icon">⚠️</div>
       <div class="alert-content">
         <strong>위임 관련!</strong><br>
-        <span id="undelegatedAmount">0</span> BGOV 토큰이 본인에게 위임되지 않았습니다. 투표권을 활성화하려면 본인에게 위임해주세요.
+        <span id="undelegatedAmount">0</span> PTT 토큰이 본인에게 위임되지 않았습니다. 투표권을 활성화하려면 본인에게 위임해주세요.
       </div>
       <button onclick="$('#delegateSelf').click()" class="alert-action">나에게 바로 위임하기</button>
     </div>
@@ -135,7 +135,7 @@
 
         <div class="governance-info">
           <div class="gov-metric">
-            <span class="metric-label">BGOV 잔액</span>
+            <span class="metric-label">PTT 잔액</span>
             <div id="gov" class="metric-value">-</div>
           </div>
 
@@ -179,7 +179,7 @@
   </div>
 
   <footer class="foot">
-    <small>© Blooming Demo – Voucher System – Points ↔ BGOV</small>
+    <small>© Blooming Demo – Voucher System – Points ↔ PTT</small>
   </footer>
 
   <script src="utils.js"></script>
