@@ -2,7 +2,7 @@
 pragma solidity ^0.8.25;
 
 /**
- * BloomingGov (BGOV) - Voucher System
+ * pointToToken(PTT) - Voucher System
  * - ERC20Votes: 온체인 거버넌스 투표권(위임/체크포인트)
  * - ERC20Permit: EIP-2612 서명 승인(permit)
  * - ERC20Burnable: 사용자 소각 지원
