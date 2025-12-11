@@ -24,7 +24,7 @@ function displayVouchers(vouchers) {
   const html = vouchers.map(voucher => `
     <div class="voucher-card" data-nonce="${voucher.nonce}">
       <div class="voucher-header">
-        <div class="voucher-amount">${formatTokenAmount(voucher.token_amount)} BGOV</div>
+        <div class="voucher-amount">${formatTokenAmount(voucher.token_amount)} PTT</div>
         <div class="voucher-status ${getVoucherStatusClass(voucher)}">${getVoucherStatusText(voucher)}</div>
       </div>
       <div class="voucher-details">
@@ -92,7 +92,7 @@ async function createVoucher(points) {
     if (r.error) throw new Error(r.error);
 
     $('#tx').className = 'status ok';
-    $('#tx').textContent = `✅ 바우처 생성 완료! 토큰: ${formatTokenAmount(r.voucher.tokenAmount)} BGOV`;
+    $('#tx').textContent = `✅ 바우처 생성 완료! 토큰: ${formatTokenAmount(r.voucher.tokenAmount)} PTT`;
 
     await Promise.allSettled([refreshPoints(), refreshVouchers()]);
     hideOverlay('바우처 생성 완료');
