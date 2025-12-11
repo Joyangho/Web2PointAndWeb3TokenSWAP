@@ -24,9 +24,8 @@ import "@openzeppelin/contracts@5.0.2/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts@5.0.2/utils/cryptography/ECDSA.sol";
 import "@openzeppelin/contracts@5.0.2/utils/Nonces.sol";
 
-/// @title BloomingGov (BGOV) - Voucher System
 /// @notice 바우처 기반 포인트↔토큰 교환, 거버넌스 투표를 지원하는 ERC20 토큰
-contract BloomingGov is
+contract pointToToken is
     ERC20,
     ERC20Burnable,
     ERC20Permit,
@@ -105,8 +104,8 @@ contract BloomingGov is
     // -----------------------------
 
     constructor(address _serverSigner)
-        ERC20("BloomingGov", "BGOV")
-        ERC20Permit("BloomingGov")
+        ERC20("pointToToken", "PTT")
+        ERC20Permit("pointToToken")
         Ownable(msg.sender)
     {
         if (_serverSigner == address(0)) revert ZeroAddress();
